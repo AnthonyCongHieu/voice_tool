@@ -1,7 +1,7 @@
 import customtkinter as ctk
 from tkinter import filedialog
 from pydub import AudioSegment, silence
-import threading, os, subprocess, sys, time
+import threading, os, subprocess, sys, time, random
 
 # Ẩn cửa sổ console ngay khi khởi động (chỉ trên Windows)
 if sys.platform == "win32":
@@ -57,7 +57,7 @@ PHRASE_6_MS = FRAME_MS * 7        # 200ms
 # ============================
 # Hàm xử lý file âm thanh
 # ============================
-def process_audio(input_path, output_path, silence_thresh, progress_callback, text_callback, format_out):
+def process_audio(input_path, output_path, silence_thresh, progress_callback, text_callback, format_out, logic_mode):
     audio = AudioSegment.from_file(input_path)
     silence_ranges = silence.detect_silence(audio, min_silence_len=FRAME_MS*4, silence_thresh=silence_thresh)
 
@@ -72,25 +72,52 @@ def process_audio(input_path, output_path, silence_thresh, progress_callback, te
         if start > last_end:
             result += audio[last_end:start]
 
-        if frame_len > 20:
-            # Cắt còn đúng 800ms
-            head, tail = 200, 100
-            mid_sil = PARA_CUT_MS - head - tail
-            result += audio[start:start + head]
-            result += AudioSegment.silent(duration=mid_sil)
-            result += audio[end - tail:end]
-
-        elif 6 <= frame_len <= 20:
-            # Cắt còn 6 frame (200ms)
-            head, tail = 100, 50
-            mid_sil = PHRASE_6_MS - head - tail
-            result += audio[start:start + head]
-            result += AudioSegment.silent(duration=mid_sil)
-            result += audio[end - tail:end]
-
+        if logic_mode == "logic_moi":
+            if frame_len <= 6:
+                result += audio[start:end]
+            elif 7 <= frame_len <= 19:
+                choices = [v for v in (6, 7, 8) if v <= frame_len]
+                target_frames = random.choice(choices or [6])
+                target_ms = FRAME_MS * target_frames
+                head = min(100, silence_len)
+                tail = min(50, max(0, silence_len - head))
+                start_head = min(end, start + head)
+                end_tail = max(start, end - tail)
+                used_head = start_head - start
+                used_tail = end - end_tail
+                mid_sil = max(0, target_ms - used_head - used_tail)
+                result += audio[start:start_head]
+                if mid_sil > 0:
+                    result += AudioSegment.silent(duration=mid_sil)
+                result += audio[end_tail:end]
+            elif frame_len > 20:
+                head, tail = 200, 100
+                start_head = min(end, start + head)
+                end_tail = max(start, end - tail)
+                used_head = start_head - start
+                used_tail = end - end_tail
+                mid_sil = max(0, PARA_CUT_MS - used_head - used_tail)
+                result += audio[start:start_head]
+                if mid_sil > 0:
+                    result += AudioSegment.silent(duration=mid_sil)
+                result += audio[end_tail:end]
+            else:
+                result += audio[start:end]
         else:
-            # Giữ nguyên
-            result += audio[start:end]
+            if frame_len > 20:
+                head, tail = 200, 100
+                mid_sil = PARA_CUT_MS - head - tail
+                result += audio[start:start + head]
+                result += AudioSegment.silent(duration=mid_sil)
+                result += audio[end - tail:end]
+            elif 6 <= frame_len <= 20:
+                head, tail = 100, 50
+                mid_sil = PHRASE_6_MS - head - tail
+                result += audio[start:start + head]
+                result += AudioSegment.silent(duration=mid_sil)
+                result += audio[end - tail:end]
+            else:
+                result += audio[start:end]
 
         last_end = end
         percent = round((i + 1) / total * 100)
@@ -114,6 +141,7 @@ class VoiceApp(ctk.CTk):
         self.input_file = ""
         self.output_file = ""
         self.output_format = ctk.StringVar(value="mp3")
+        self.logic_mode = ctk.StringVar(value="logic_cu")
 
         self.create_widgets()
 
@@ -133,6 +161,9 @@ class VoiceApp(ctk.CTk):
         ctk.CTkLabel(self, text="\U0001F4DD Chọn định dạng xuất ra:").pack(pady=(10, 0))
         self.format_select = ctk.CTkOptionMenu(self, values=["mp3", "wav"], variable=self.output_format)
         self.format_select.pack()
+        ctk.CTkLabel(self, text="\U0001F916 Chọn chế độ xử lý:").pack(pady=(10, 0))
+        self.logic_select = ctk.CTkOptionMenu(self, values=["logic_cu", "logic_moi"], variable=self.logic_mode)
+        self.logic_select.pack()
         self.progress = ctk.CTkProgressBar(self, width=500)
         self.progress.set(0)
         self.progress.pack(pady=10)
@@ -176,10 +207,10 @@ class VoiceApp(ctk.CTk):
         self.update_status("\u23f3 Chuẩn bị xử lý...", "yellow")
         self.progress.set(0)
         self.link_label.configure(text="")
-        thread = threading.Thread(target=self.run_processing, args=(db_thresh,))
+        thread = threading.Thread(target=self.run_processing, args=(db_thresh, self.logic_mode.get()))
         thread.start()
 
-    def run_processing(self, db_thresh):
+    def run_processing(self, db_thresh, logic_mode):
         try:
             start_time = time.time()
             process_audio(
@@ -188,7 +219,8 @@ class VoiceApp(ctk.CTk):
                 db_thresh,
                 self.progress.set,
                 self.update_status,
-                self.output_format.get()
+                self.output_format.get(),
+                logic_mode
             )
             elapsed = round(time.time() - start_time, 2)
             self.update_status(f"\u2705 Đã xử lý xong! (⏱ {elapsed} giây)", "green")
