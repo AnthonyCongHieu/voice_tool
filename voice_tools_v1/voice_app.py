@@ -155,27 +155,27 @@ class VoiceApp(ctk.CTk):
 
         # Action Buttons (Bottom of Sidebar)
         actions_frame = ctk.CTkFrame(sidebar, fg_color="transparent")
-        actions_frame.pack(side="bottom", fill="x", padx=15, pady=30)
+        actions_frame.pack(side="bottom", fill="x", padx=10, pady=10) # Reduced padding
         
         self.start_btn = ctk.CTkButton(
-            actions_frame, text="▶️ BẮT ĐẦU XỬ LÝ", command=self.start_processing,
-            height=50, font=("Segoe UI", 15, "bold"),
-            fg_color="#22c55e", hover_color="#16a34a", corner_radius=10
+            actions_frame, text="▶️ BẮT ĐẦU", command=self.start_processing,
+            height=40, font=("Segoe UI", 14, "bold"), # Reduced height/font
+            fg_color="#22c55e", hover_color="#16a34a", corner_radius=8
         )
-        self.start_btn.pack(fill="x", pady=5)
+        self.start_btn.pack(fill="x", pady=(0, 5))
         
         hbox = ctk.CTkFrame(actions_frame, fg_color="transparent")
-        hbox.pack(fill="x", pady=5)
+        hbox.pack(fill="x", pady=0)
         
         self.cancel_btn = ctk.CTkButton(
             hbox, text="⏹️ HỦY", command=self.request_cancel,
-            height=40, width=100, fg_color="#ef4444", hover_color="#dc2626", state="disabled"
+            height=35, width=80, fg_color="#ef4444", hover_color="#dc2626", state="disabled"
         )
         self.cancel_btn.pack(side="left", expand=True, fill="x", padx=(0, 5))
         
         self.restart_btn = ctk.CTkButton(
             hbox, text="🔄 RESET", command=self.restart_app,
-            height=40, width=80, fg_color="#475569", hover_color="#334155"
+            height=35, width=80, fg_color="#475569", hover_color="#334155"
         )
         self.restart_btn.pack(side="left", expand=True, fill="x", padx=(5, 0))
 

@@ -33,10 +33,16 @@ exit /b 1
 :RunBuild
 echo [INFO] Command: "%PYTHON_CMD%"
 
-"%PYTHON_CMD%" -m PyInstaller --noconsole --onefile --clean ^
+echo [INFO] Cleaning up previous builds to free space...
+if exist "build" rmdir /s /q "build"
+if exist "dist" rmdir /s /q "dist"
+if exist "*.spec" del /f /q "*.spec"
+
+:: Run Build (ONEDIR for fast startup)
+"%PYTHON_CMD%" -m PyInstaller --noconsole --onedir --clean ^
     --name "Voice_AI_Editor_Pro" ^
     --icon=NONE ^
-    --hidden-import=faster_whisper ^
+    --collect-all=faster_whisper ^
     --hidden-import=pydub ^
     --hidden-import=customtkinter ^
     --collect-all=customtkinter ^
@@ -54,7 +60,18 @@ if %ERRORLEVEL% NEQ 0 (
 
 echo.
 echo ===========================================
-echo      Build Complete! Check 'dist' folder.
+echo      Build Success! creating ZIP archive...
+echo ===========================================
+
+cd dist
+powershell Compress-Archive -Path "Voice_AI_Editor_Pro" -DestinationPath "Voice_AI_Editor_Pro_v3.zip" -Force
+cd ..
+
+echo.
+echo ===========================================
+echo      DONE! 
+echo      1. Run folder: dist\Voice_AI_Editor_Pro\Voice_AI_Editor_Pro.exe (Instant Start)
+echo      2. Share file: dist\Voice_AI_Editor_Pro_v3.zip
 echo ===========================================
 dir dist
 pause
