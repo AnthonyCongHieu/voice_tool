@@ -1,31 +1,60 @@
 @echo off
+setlocal
 echo ===========================================
 echo      Building Voice AI Editor Pro EXE
 echo ===========================================
 
-:: Install PyInstaller if missing
-pip install pyinstaller
+:: 1. Check for Virtual Env
+if exist "venv\Scripts\python.exe" (
+    echo [INFO] Using Virtual Environment...
+    set "PYTHON_CMD=venv\Scripts\python.exe"
+    goto :RunBuild
+)
 
-:: Clean previous builds
-rmdir /s /q build
-rmdir /s /q dist
+:: 2. Check for Python 3.11 in Program Files (Verified Path)
+if exist "C:\Program Files\Python311\python.exe" (
+    echo [INFO] Using Python 3.11...
+    set "PYTHON_CMD=C:\Program Files\Python311\python.exe"
+    goto :RunBuild
+)
 
-:: Build EXE
-:: --noconsole: Hide console window
-:: --onefile: Single EXE file
-:: --name: Output name
-:: --add-data: Include ffmpeg if needed (optional)
-:: --hidden-import: Ensure faster-whisper is included
+:: 3. Fallback to system python
+python --version >nul 2>&1
+if %errorlevel% equ 0 (
+    echo [INFO] Using System Python...
+    set "PYTHON_CMD=python"
+    goto :RunBuild
+)
 
-python -m PyInstaller --noconsole --onefile ^
+echo [ERROR] Python not found! Please install Python.
+pause
+exit /b 1
+
+:RunBuild
+echo [INFO] Command: "%PYTHON_CMD%"
+
+"%PYTHON_CMD%" -m PyInstaller --noconsole --onefile --clean ^
     --name "Voice_AI_Editor_Pro" ^
     --icon=NONE ^
     --hidden-import=faster_whisper ^
     --hidden-import=pydub ^
     --hidden-import=customtkinter ^
+    --collect-all=customtkinter ^
+    --log-level=WARN ^
     voice_app.py
 
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo ===========================================
+    echo      BUILD FAILED!
+    echo ===========================================
+    pause
+    exit /b %ERRORLEVEL%
+)
+
+echo.
 echo ===========================================
-echo      Build Complete! Check 'dist' folder
+echo      Build Complete! Check 'dist' folder.
 echo ===========================================
+dir dist
 pause
