@@ -1,4 +1,6 @@
-customtkinter
-pydub
-faster-whisper
-pyinstaller
+customtkinter>=5.2.0
+pydub>=0.25.1
+faster-whisper>=0.10.0
+torch>=2.0.0
+torchaudio>=2.0.0
+pyinstaller>=5.13.0

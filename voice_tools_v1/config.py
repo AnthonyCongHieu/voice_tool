@@ -9,8 +9,8 @@ FRAME_RATE = 30
 FRAME_MS = 1000 // FRAME_RATE  # ~33ms per frame
 
 # === SILENCE PROCESSING THRESHOLDS ===
-# Default dB threshold for silence detection
-DEFAULT_SILENCE_THRESH = -45
+# Default dB threshold for silence detection (giảm từ -45 để detect silence có tạp âm)
+DEFAULT_SILENCE_THRESH = -37
 
 # Minimum silence length to detect (in frames)
 MIN_SILENCE_FRAMES = 4  # ~133ms

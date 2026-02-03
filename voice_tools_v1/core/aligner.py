@@ -52,7 +52,7 @@ def extract_words_with_punctuation(script: str) -> List[Tuple[str, str]]:
 def align_transcript_with_script(
     transcript_words: List[dict],  # [{text, start, end}, ...]
     script: str
-) -> List[AlignedWord]:
+) -> Tuple[List[AlignedWord], dict]:
     """
     Align transcribed words with script to get punctuation info.
     
@@ -61,7 +61,9 @@ def align_transcript_with_script(
         script: User's script with punctuation
     
     Returns:
-        List of AlignedWord with punctuation from script
+        Tuple of:
+        - List of AlignedWord with punctuation from script
+        - Alignment report dict with mismatch statistics
     """
     # Extract words and punctuation from script
     script_words = extract_words_with_punctuation(script)
@@ -71,13 +73,17 @@ def align_transcript_with_script(
     matched_count = 0
     punct_count = 0
     
-    for tw in transcript_words:
+    # Mismatch tracking
+    mismatched_words = []  # List of (transcript_word, expected_script_word, position)
+    
+    for i, tw in enumerate(transcript_words):
         word_text = normalize_text(tw.get('text', tw.get('word', '')))
         # Whisper uses seconds, we use milliseconds. Always convert.
         start_ms = int(tw.get('start', 0) * 1000)
         end_ms = int(tw.get('end', 0) * 1000)
         
         punct = ""
+        matched = False
         
         # Try to find matching word in script
         if script_idx < len(script_words):
@@ -88,6 +94,7 @@ def align_transcript_with_script(
                 punct = script_punct
                 script_idx += 1
                 matched_count += 1
+                matched = True
                 if punct:
                     punct_count += 1
                     print(f"[ALIGN] '{word_text}' -> '{script_word}' + '{punct}' at {end_ms}ms")
@@ -99,10 +106,21 @@ def align_transcript_with_script(
                         punct = sp
                         script_idx += lookahead + 1
                         matched_count += 1
+                        matched = True
                         if punct:
                             punct_count += 1
                             print(f"[ALIGN] '{word_text}' -> '{sw}' + '{punct}' (lookahead) at {end_ms}ms")
                         break
+                
+                # Track mismatch if no match found
+                if not matched:
+                    expected = script_words[script_idx][0] if script_idx < len(script_words) else "N/A"
+                    mismatched_words.append({
+                        'position': i + 1,
+                        'transcript': word_text,
+                        'expected': expected,
+                        'time_ms': end_ms
+                    })
         
         aligned.append(AlignedWord(
             text=tw.get('text', tw.get('word', '')).strip(),
@@ -111,8 +129,26 @@ def align_transcript_with_script(
             punctuation_after=punct
         ))
     
-    print(f"[ALIGNER] Matched {matched_count}/{len(transcript_words)} words, found {punct_count} punctuation marks")
-    return aligned
+    # Build alignment report
+    total_words = len(transcript_words)
+    mismatch_count = len(mismatched_words)
+    match_rate = (matched_count / total_words * 100) if total_words > 0 else 0
+    
+    alignment_report = {
+        'total_transcript_words': total_words,
+        'total_script_words': len(script_words),
+        'matched_count': matched_count,
+        'mismatch_count': mismatch_count,
+        'match_rate': match_rate,
+        'punct_found': punct_count,
+        'mismatched_words': mismatched_words[:10]  # Limit to first 10
+    }
+    
+    print(f"[ALIGNER] Matched {matched_count}/{total_words} words ({match_rate:.1f}%), found {punct_count} punctuation marks")
+    if mismatch_count > 0:
+        print(f"[ALIGNER] ⚠ {mismatch_count} words không match!")
+    
+    return aligned, alignment_report
 
 
 

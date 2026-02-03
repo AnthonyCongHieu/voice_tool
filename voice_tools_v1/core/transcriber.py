@@ -24,28 +24,50 @@ _cached_model = None
 _cached_model_size = None
 
 
-def get_whisper_model(model_size: str = "medium"):
+def get_whisper_model(model_size: str = "medium", log_callback=None):
     """
     Get or create Whisper model (singleton pattern).
     Caches model to avoid reloading on each transcription.
     
     Args:
-        model_size: "small" (fastest), "medium" (balanced), "large-v3" (most accurate)
+        model_size: "small" (fastest), "medium" (balanced), "large-v3-turbo" (best, fast)
+        log_callback: Optional function to log messages to UI
     """
     global _cached_model, _cached_model_size
     
+    def _log(msg):
+        print(msg)  # Always print to console
+        if log_callback:
+            log_callback(msg)
+    
     # Return cached model if same size requested
     if _cached_model is not None and _cached_model_size == model_size:
+        _log(f"[AI] Using cached model '{model_size}'")
         return _cached_model
     
     from faster_whisper import WhisperModel
     import sys
     
-    # Determine base path for models
+    # Add nvidia CUDA DLLs to PATH for GPU support
     if getattr(sys, 'frozen', False):
         base_path = os.path.dirname(sys.executable)
     else:
         base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
+    # Find nvidia DLLs in multiple possible locations
+    possible_site_packages = [
+        os.path.join(base_path, "venv", "Lib", "site-packages"),
+        os.path.join(sys.prefix, "Lib", "site-packages"),  # Current venv
+    ]
+    
+    nvidia_subdirs = ["cublas", "cudnn", "cuda_runtime"]
+    
+    for site_pkg in possible_site_packages:
+        for subdir in nvidia_subdirs:
+            nvidia_path = os.path.join(site_pkg, "nvidia", subdir, "bin")
+            if os.path.exists(nvidia_path) and nvidia_path not in os.environ.get('PATH', ''):
+                os.environ['PATH'] = nvidia_path + os.pathsep + os.environ.get('PATH', '')
+                print(f"[AI] Added CUDA path: {nvidia_path}")
         
     models_dir = os.path.join(base_path, "models")
     os.makedirs(models_dir, exist_ok=True)
@@ -63,25 +85,24 @@ def get_whisper_model(model_size: str = "medium"):
     selected_root = models_dir # Default to local for download
     found_existing = False
     
-    print(f"\n[AI] Searching for model '{model_size}'...")
+    _log(f"[AI] Searching for model '{model_size}'...")
     
     for root in possible_roots:
         if os.path.exists(root):
             # Check if likely contains the model (simple check)
             # Faster-whisper folder names usually start with "models--"
             # We just check if the folder exists for now to prefer existing cache
-            print(f"  - Checking: {root}")
             # If standard whisper cache exists and not empty, use it to avoid re-download
             if len(os.listdir(root)) > 0: 
                 selected_root = root
                 found_existing = True
-                print(f"  -> Found potential cache at: {root}")
                 break
     
     if not found_existing:
-         print(f"[AI] Model not found locally. Will download to: {selected_root}")
-         print("[AI] This make take a few minutes (approx 2GB)...")
+         _log(f"[AI] Model not found locally. Will download...")
 
+    # Always try CUDA first for GPU acceleration
+    _log(f"[AI] Loading model '{model_size}'...")
     try:
         _cached_model = WhisperModel(
             model_size,
@@ -90,20 +111,40 @@ def get_whisper_model(model_size: str = "medium"):
             download_root=selected_root,
             local_files_only=False
         )
-        print(f"[AI] Model '{model_size}' loaded successfully from {selected_root}!")
+        _log(f"[AI] >>> MODEL LOADED ON GPU (CUDA) <<<")
+        _log(f"[AI] Device: NVIDIA RTX - Fast mode enabled!")
         _cached_model_size = model_size
         return _cached_model
         
-    except Exception as e:
-        print(f"[ERROR] Failed to load model: {e}")
-        # Build friendly error message
-        raise RuntimeError(f"Model Load Failed: {str(e)}\nPath: {models_dir}")
+    except Exception as cuda_error:
+        error_msg = str(cuda_error).lower()
+        
+        # CUDA failed - try CPU fallback
+        _log(f"[AI] GPU unavailable, using CPU mode (slower)")
+        
+        try:
+            _cached_model = WhisperModel(
+                model_size,
+                device="cpu",
+                compute_type="int8",
+                download_root=selected_root,
+                local_files_only=False
+            )
+            _log(f"[AI] >>> MODEL LOADED ON CPU <<<")
+            _log(f"[AI] Warning: CPU mode is slower!")
+            _cached_model_size = model_size
+            return _cached_model
+            
+        except Exception as cpu_error:
+            _log(f"[ERROR] Both GPU and CPU failed!")
+            raise RuntimeError(f"Model Load Failed: GPU={cuda_error}, CPU={cpu_error}")
 
 
 def transcribe_audio(
     audio_path: str,
     progress_callback: Optional[Callable[[str], None]] = None,
-    model_size: str = "medium"
+    model_size: str = "medium",
+    log_callback: Optional[Callable[[str], None]] = None
 ) -> List[dict]:
     """
     Transcribe audio using Faster-Whisper.
@@ -112,12 +153,13 @@ def transcribe_audio(
     Args:
         audio_path: Path to audio file
         progress_callback: Optional callback for progress updates
-        model_size: "small", "medium", or "large-v3"
+        model_size: "small", "medium", or "large-v3-turbo"
+        log_callback: Optional callback for log messages (to app log area)
     """
     if progress_callback:
         progress_callback(f"Loading Whisper ({model_size})...")
     
-    model = get_whisper_model(model_size)
+    model = get_whisper_model(model_size, log_callback=log_callback)
     
     if progress_callback:
         progress_callback("Transcribing...")
@@ -129,7 +171,7 @@ def transcribe_audio(
             language="vi",
             word_timestamps=True,
             vad_filter=True,
-            beam_size=5 if model_size == "large-v3" else 3
+            beam_size=3 if "large" in model_size else 2
         )
         
         # Generator verification inside try block
@@ -157,7 +199,7 @@ def transcribe_audio(
                 language="vi",
                 word_timestamps=True,
                 vad_filter=False, # Disable VAD
-                beam_size=5 if model_size == "large-v3" else 3
+                beam_size=3 if "large" in model_size else 2
             )
             
             words = []

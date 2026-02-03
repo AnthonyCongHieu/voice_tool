@@ -33,6 +33,26 @@ exit /b 1
 :RunBuild
 echo [INFO] Command: "%PYTHON_CMD%"
 
+echo.
+echo [INFO] Checking for CUDA DLLs...
+if exist "cuda_dlls" (
+    set DLL_COUNT=0
+    if exist "cuda_dlls\cublas64_12.dll" set /a DLL_COUNT+=1
+    if exist "cuda_dlls\cublasLt64_12.dll" set /a DLL_COUNT+=1
+    if exist "cuda_dlls\cudart64_12.dll" set /a DLL_COUNT+=1
+    
+    if !DLL_COUNT! GEQ 3 (
+        echo [SUCCESS] Found CUDA DLLs - GPU acceleration will be available
+    ) else (
+        echo [WARN] Found !DLL_COUNT!/3 CUDA DLLs - GPU may not work properly
+        echo [INFO] Run: python download_cuda_dlls.py to get missing DLLs
+    )
+) else (
+    echo [WARN] No CUDA DLLs found - Will build CPU-only version
+    echo [INFO] For GPU support, run: python download_cuda_dlls.py
+)
+
+echo.
 echo [INFO] Cleaning up previous builds to free space...
 if exist "build" rmdir /s /q "build"
 if exist "dist" rmdir /s /q "dist"
@@ -64,14 +84,14 @@ echo      Build Success! creating ZIP archive...
 echo ===========================================
 
 cd dist
-powershell Compress-Archive -Path "Voice_AI_Editor_Pro" -DestinationPath "Voice_AI_Editor_Pro_v3.zip" -Force
+powershell Compress-Archive -Path "Voice_AI_Editor_Pro" -DestinationPath "Voice_AI_Editor_Pro_v4.0.zip" -Force
 cd ..
 
 echo.
 echo ===========================================
 echo      DONE! 
 echo      1. Run folder: dist\Voice_AI_Editor_Pro\Voice_AI_Editor_Pro.exe (Instant Start)
-echo      2. Share file: dist\Voice_AI_Editor_Pro_v3.zip
+echo      2. Share file: dist\Voice_AI_Editor_Pro_v4.0.zip
 echo ===========================================
 dir dist
 pause

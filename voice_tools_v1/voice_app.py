@@ -128,9 +128,9 @@ class VoiceApp(ctk.CTk):
         
         # Model
         ctk.CTkLabel(settings_frame, text="🤖 AI Model:", font=("Segoe UI", 12, "bold")).pack(anchor="w")
-        self.model_size_var = ctk.StringVar(value="large-v3")
+        self.model_size_var = ctk.StringVar(value="large-v3-turbo")
         self.model_select = ctk.CTkOptionMenu(
-            settings_frame, values=["small (4x speed)", "medium (2x speed)", "large-v3 (best)"],
+            settings_frame, values=["small (4x)", "medium (2x)", "large-v3-turbo (best)"],
             variable=self.model_size_var, height=35
         )
         self.model_select.pack(fill="x", pady=(5, 15))
